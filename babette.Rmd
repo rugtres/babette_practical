@@ -199,6 +199,7 @@ Now that we have our results, we can plot them and see how we did:
 
 ```{r plot_things}
 beast_result$estimates %>%
+  mutate("Sample" = Sample / 1000000) %>%
   gather(key = "statistic", val = "value", -c(Sample)) %>%
   ggplot(aes(x = Sample, y = value)) +
   geom_line() +
@@ -220,6 +221,7 @@ Typically, removal of 10-20% of the data is considered acceptable.
 ```{r remove burnin}
 beast_result$estimates <- tracerer::remove_burn_ins(beast_result$estimates, 0.1)
 beast_result$estimates %>%
+  mutate("Sample" = Sample / 1000000) %>%
   gather(key = "statistic", val = "value", -c(Sample)) %>%
   ggplot(aes(x = Sample, y = value)) +
   geom_line() +
@@ -294,6 +296,7 @@ to reflect estimates for the different substitution rates:
 
 ```{r plot_gtr}
 beast_result_gtr$estimates %>%
+  mutate("Sample" = Sample / 1000000) %>%
   gather(key = "statistic", val = "value", -c(Sample)) %>%
   ggplot(aes(x = Sample, y = value)) +
   geom_line() +
@@ -306,6 +309,7 @@ interesting to look at the median estimates for the different rates:
 ```{r gtr_burnin plot}
 gtr_estimates <- tracerer::remove_burn_ins(beast_result_gtr$estimates, 0.1)
 gtr_estimates %>%
+  mutate("Sample" = Sample / 1000000) %>%
   gather(key = "statistic", val = "value", -c(Sample)) %>%
   ggplot(aes(x = Sample, y = value)) +
   geom_line() +
@@ -337,15 +341,13 @@ babette::plot_densitree(gtr_trees, alpha = 0.1)
 
 cons_tree_gtr <- phytools::consensus.edges(trees = all_trees)
 par(mfrow = c(1, 2))
-plot(cons_tree, main = "JC69")
-plot(cons_tree_gtr, main = "GTR")
-
-ape::ltt.plot(cons_tree)
-ape::ltt.lines(cons_tree_gtr, col = "blue")
+plot(cons_tree, main = "JC69", type = "cladogram")
+add.scale.bar()
+plot(cons_tree_gtr, main = "GTR", type = "cladogram")
+add.scale.bar()
 ```
 
-It seems the data is so strongly divergent, that it overwhelms 
-choices about the substitution model.
+It seems the information in the data is very clear, and that choices about the substitution model do not impact our findings.
 
 ### Root age
 
@@ -394,6 +396,7 @@ Again, we first plot our MCMC chains:
 
 ```{r plot_mrca}
 beast_result$estimates %>%
+  mutate("Sample" = Sample / 1000000) %>%
   gather(key = "statistic", val = "value", -c(Sample)) %>%
   ggplot(aes(x = Sample, y = value)) +
   geom_line() +
@@ -406,6 +409,7 @@ time:
 ```{r burnin_mrca}
 estimates <- tracerer::remove_burn_ins(beast_result$estimates, 0.2)
 estimates %>%
+  mutate("Sample" = Sample / 1000000) %>%
   gather(key = "statistic", val = "value", -c(Sample)) %>%
   ggplot(aes(x = Sample, y = value)) +
   geom_line() +
@@ -415,7 +419,7 @@ tracerer::calc_esses(estimates, sample_interval = 1000)
 
 Having lengthened the chain now pays off, as almost all ESS values are > 200.
 
-We again remove the faulty trees as well, and plot the distribution of trees:
+We again remove the burn-in trees as well, and plot the distribution of trees:
 ```{r burnin_mrca_trees}
 all_trees <- beast_result$dna_trees
 start <- floor(0.2 * length(all_trees))
