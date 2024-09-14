@@ -1,0 +1,216 @@
+---
+title: "Babette practical: solution"
+author: "Thijs Janzen"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+html_document: default
+editor_options:
+  markdown:
+  wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(babette)
+library(ape)
+library(beautier)
+library(mauricer)
+library(tracerer)
+```
+
+### Loading data
+
+We can load data into R using the following functions, where we load an
+example file from the BEAST2 examples (alternatively, download the file
+from Brightspace). We then use the package ape to read the example file.
+
+```{r loading data}
+nexus_filename <- beastier::get_beast2_example_filename("Primates.nex")
+fasta_filename <- "primates.fas"
+
+nexus_data <- ape::read.nexus.data(nexus_filename)
+output_data <- ape::as.DNAbin(nexus_data)
+
+ape::write.FASTA(output_data, file = fasta_filename)
+str(nexus_data)
+```
+
+The last command shows us that the dataset we have obtained containes
+sequences of 12 primate species.
+
+### Setting up babette analysis
+
+Again, we choose a birth-death prior:
+
+```{r tree_prior}
+bd_prior <- beautier::create_tree_prior_bd()
+```
+
+#### Clock model
+
+Again, we choose a relaxed log-normal model:
+
+```{r clock_model}
+rln_clock <- beautier::create_clock_model_rln()
+```
+
+#### Define MCMC
+
+I choose a bit longer chain, as this tends to yield better results. Please be
+aware that this may take quite some time to run!
+
+```{r chain_setup}
+mcmc_settings <- beautier::create_mcmc(chain_length = 1e7, store_every = 5000)
+```
+
+#### MRCA prior
+
+According to Finstermeier et al 2013 (doi:10.1371/journal.pone.0069504), the 
+crown age of primates is 66-69 MYA. This corresponds to a normal distribution
+with mean 67.5 and sd of 0.75 (giving a 95% CI of [66, 69]). This contrasts 
+later findings by Dos Reis et al. 2018 (doi:10.1093/sysbio/syy001), who compare
+different clock models and obtain an estimate of 70-79 MYA (mean = 74.6, 
+sd = 2.35). Which one do you think will provide better results?
+
+```{r mrca_prior}
+mrca_prior <- beautier::create_mrca_prior(
+     taxa_names = beautier::get_taxa_names("primates.fas"),
+     is_monophyletic = TRUE,
+     mrca_distr = beautier::create_normal_distr(mean = 67.5, sigma = 0.75))
+```
+
+
+## Running Babette
+
+Now we can combine our priors and mcmc settings into an inference model,
+and pass this inference model to babette to start the inference
+
+```{r inf_model}
+beauti_options <- beautier::create_beauti_options_v2_6()
+
+inf_model <- beautier::create_inference_model(tree_prior = bd_prior,
+                                              clock_model = rln_clock,
+                                              mcmc = mcmc_settings,
+                                              mrca_prior = mrca_prior,
+                                              beauti_options = beauti_options)
+
+beast_result <- babette::bbt_run_from_model(fasta_filename = "primates.fas",
+                                            inference_model = inf_model,
+                                            beast2_options = beastier::create_beast2_options(rng_seed = 42))
+```
+
+### Analysing results
+
+Now that we have our results, we can plot them and see how we did:
+
+```{r plot_things}
+beast_result$estimates %>%
+  gather(key = "statistic", val = "value", -c(Sample)) %>%
+  ggplot(aes(x = Sample, y = value)) +
+  geom_line() +
+  facet_wrap(~statistic, scales = "free")
+```
+
+Clearly, burnin is an issue, let's first remove 10%:
+
+```{r remove burnin}
+estimates <- tracerer::remove_burn_ins(beast_result$estimates, 0.1)
+estimates %>%
+  gather(key = "statistic", val = "value", -c(Sample)) %>%
+  ggplot(aes(x = Sample, y = value)) +
+  geom_line() +
+  facet_wrap(~statistic, scales = "free")
+
+tracerer::calc_esses(estimates, sample_interval = 5000)
+```
+
+All ESS values are >> 200, which is very satisfying, so 10% is enough burnin.
+We now also have to remove the accompanying trees of those 10% by hand:
+
+```{r trees}
+all_trees <- beast_result$primates_trees
+start <- floor(0.1 * length(all_trees))
+end <- length(all_trees)
+all_trees <- all_trees[start:end]
+```
+
+## Resulting tree(s)
+
+Having removed the burnin, we can now plot our results in two ways: 1)
+using a densi-tree, which superimposes all trees on top of each other
+and 2) using a consensus tree, which calculates the 'average' resulting
+tree from our distribution of trees.
+
+```{r plotting}
+babette::plot_densitree(all_trees, alpha = 0.1)
+
+cons_tree <- phytools::consensus.edges(trees = all_trees)
+plot(cons_tree)
+```
+
+Does this tree make sense to you?
+
+#### Age of Homo Sapiens
+
+An interesting tidbit would be to infer the age of Homo Sapiens. Let's take
+the consensus tree and find this. In here, we have to combine some information.
+First, we have to know which index is used to index Homo sapiens. In the
+tip.labels, we find the index of 2:
+```{r print_tip}
+cons_tree$tip.label
+human_index <- which(cons_tree$tip.label == "Homo_sapiens")
+```
+
+Phylogenies in R are stored with two information objects: one edge table, and
+one edge-length vector. The edge table indicates which nodes are connected with
+each other and with tips. The edge-length vector indicates the lengths of these
+connections (e.g. branch lengths). We now know to look for an edge leading 
+towards tip '2':
+```{r find_edge_index}
+cons_tree$edge
+tip_index <- which(cons_tree$edge[, 2] == human_index)
+tip_index
+```
+
+This is on the 7th position. We can now use this to look up our branch length:
+```{r find_age}
+cons_tree$edge.length[tip_index]
+```
+
+Alternatively, we can also plot the phylogeny with edge labels!
+```{r plot_edge_labels}
+plot(cons_tree)
+ape::edgelabels(round(cons_tree$edge.length, 2), col = "blue")
+```
+
+This informs us we share an ancestor with Pan (Chimpansee) about 12.5MYA, and an
+ancestor with Gorilla ~17.3 MYA. 
+
+If we want the uncertainty in this estimate, we have to go over all trees in
+the posterior. And we can do so with lapply, which applies a function to a list.
+Because our all_trees object is a list in R, we can do the following:
+```{r estimate_posterior}
+get_homo_age <- function(tree) {
+  human_index <- which(tree$tip.label == "Homo_sapiens")
+  tip_index <- which(tree$edge[, 2] == human_index)
+  return(cons_tree$edge.length[tip_index])
+}
+
+all_ages <- lapply(all_trees, get_homo_age)
+all_ages <- unlist(all_ages)
+hist(all_ages, xlim = c(10, 16))
+mean(all_ages)
+median(all_ages)
+quantile(all_ages, c(0.025, 0.975))
+```
+
+This shows that under our current analysis, our uncertainty of the age estimate
+is very low, e.g. the 95% CI interval is very narrow around our mean estimate.
+We also see that the histogram looks a bit weird. This is due to a number of 
+trees (out of 9000!) where the branch lengths are very different:
+```{r outliers}
+length(which(all_ages < 10))
+length(which(all_ages > 14))
+```
