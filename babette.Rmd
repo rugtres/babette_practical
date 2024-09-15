@@ -352,7 +352,7 @@ par(mfrow = c(1, 2))
 plot(cons_tree, main = "JC69", type = "cladogram")
 add.scale.bar()
 plot(cons_tree_gtr, main = "GTR", type = "cladogram")
-add.scale.bar()
+add.scale.bar()d
 ```
 
 It seems the information in the data is very clear, and that choices about the 

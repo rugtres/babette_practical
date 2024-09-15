@@ -12,6 +12,7 @@ editor_options:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(fig.width = 12, fig.height = 8)
 library(tidyverse)
 library(babette)
 library(ape)
@@ -123,10 +124,10 @@ beast_result$estimates %>%
   xlab("Sampled trees (Millions)")
 ```
 
-Clearly, burnin is an issue, let's first remove 10%:
+Clearly, burnin is an issue, let's first remove 30%:
 
 ```{r remove burnin}
-estimates <- tracerer::remove_burn_ins(beast_result$estimates, 0.1)
+estimates <- tracerer::remove_burn_ins(beast_result$estimates, 0.3)
 estimates %>%
   mutate("Sample" = Sample / 1000000) %>%
   gather(key = "statistic", val = "value", -c(Sample)) %>%
@@ -143,7 +144,7 @@ We now also have to remove the accompanying trees of those 10% by hand:
 
 ```{r trees}
 all_trees <- beast_result$primates_trees
-start <- floor(0.1 * length(all_trees))
+start <- floor(0.3 * length(all_trees))
 end <- length(all_trees)
 all_trees <- all_trees[start:end]
 ```
@@ -236,7 +237,7 @@ to estimate, we use a longer chain.
 ```{r site_gtr}
 sub_model <- beautier::create_site_model_gtr()
 
-mcmc_settings <- beautier::create_mcmc(chain_length = 3e7, store_every = 5000)
+mcmc_settings <- beautier::create_mcmc(chain_length = 5e7, store_every = 5000)
 
 inf_model <- beautier::create_inference_model(tree_prior = bd_prior,
                                               clock_model = rln_clock,
