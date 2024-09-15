@@ -347,7 +347,7 @@ end <- length(gtr_trees)
 gtr_trees <- gtr_trees[start:end]
 babette::plot_densitree(gtr_trees, alpha = 0.1)
 
-cons_tree_gtr <- phytools::consensus.edges(trees = all_trees)
+cons_tree_gtr <- phytools::consensus.edges(trees = gtr_trees)
 par(mfrow = c(1, 2))
 plot(cons_tree, main = "JC69", type = "cladogram")
 add.scale.bar()
