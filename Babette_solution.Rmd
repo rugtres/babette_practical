@@ -56,13 +56,19 @@ Again, we choose a relaxed log-normal model:
 rln_clock <- beautier::create_clock_model_rln()
 ```
 
+#### Substitution model
+
+```{r substitution model}
+sub_model <- beautier::create_site_model_jc69()
+```
+
 #### Define MCMC
 
 I choose a bit longer chain, as this tends to yield better results. Please be
 aware that this may take quite some time to run!
 
 ```{r chain_setup}
-mcmc_settings <- beautier::create_mcmc(chain_length = 1e7, store_every = 5000)
+mcmc_settings <- beautier::create_mcmc(chain_length = 3e6, store_every = 5000)
 ```
 
 #### MRCA prior
@@ -92,13 +98,15 @@ beauti_options <- beautier::create_beauti_options_v2_6()
 
 inf_model <- beautier::create_inference_model(tree_prior = bd_prior,
                                               clock_model = rln_clock,
+                                              site_model = sub_model,
                                               mcmc = mcmc_settings,
                                               mrca_prior = mrca_prior,
                                               beauti_options = beauti_options)
 
 beast_result <- babette::bbt_run_from_model(fasta_filename = "primates.fas",
                                             inference_model = inf_model,
-                                            beast2_options = beastier::create_beast2_options(rng_seed = 42))
+                                            beast2_options = 
+                                beastier::create_beast2_options(rng_seed = 421))
 ```
 
 ### Analysing results
@@ -107,10 +115,12 @@ Now that we have our results, we can plot them and see how we did:
 
 ```{r plot_things}
 beast_result$estimates %>%
+  mutate("Sample" = Sample / 1000000) %>%
   gather(key = "statistic", val = "value", -c(Sample)) %>%
   ggplot(aes(x = Sample, y = value)) +
   geom_line() +
-  facet_wrap(~statistic, scales = "free")
+  facet_wrap(~statistic, scales = "free") +
+  xlab("Sampled trees (Millions)")
 ```
 
 Clearly, burnin is an issue, let's first remove 10%:
@@ -118,10 +128,12 @@ Clearly, burnin is an issue, let's first remove 10%:
 ```{r remove burnin}
 estimates <- tracerer::remove_burn_ins(beast_result$estimates, 0.1)
 estimates %>%
+  mutate("Sample" = Sample / 1000000) %>%
   gather(key = "statistic", val = "value", -c(Sample)) %>%
   ggplot(aes(x = Sample, y = value)) +
   geom_line() +
-  facet_wrap(~statistic, scales = "free")
+  facet_wrap(~statistic, scales = "free") +
+  xlab("Sampled trees (Millions)")
 
 tracerer::calc_esses(estimates, sample_interval = 5000)
 ```
@@ -214,3 +226,77 @@ trees (out of 9000!) where the branch lengths are very different:
 length(which(all_ages < 10))
 length(which(all_ages > 14))
 ```
+
+## Impact of substitution model
+
+The JC69 model is not the most realistic substitution model. Instead, let's 
+see if using a GTR model changes our findings. Because we have extra parameters
+to estimate, we use a longer chain.
+
+```{r site_gtr}
+sub_model <- beautier::create_site_model_gtr()
+
+mcmc_settings <- beautier::create_mcmc(chain_length = 3e7, store_every = 5000)
+
+inf_model <- beautier::create_inference_model(tree_prior = bd_prior,
+                                              clock_model = rln_clock,
+                                              site_model = sub_model,
+                                              mcmc = mcmc_settings,
+                                              mrca_prior = mrca_prior,
+                                              beauti_options = beauti_options)
+
+beast_result_gtr <- babette::bbt_run_from_model(fasta_filename = "primates.fas",
+                                            inference_model = inf_model,
+                                            beast2_options = 
+                              beastier::create_beast2_options(rng_seed = 4321))
+```
+
+We find the following results:
+
+```{r plot gtr_results}
+beast_result_gtr$estimates %>%
+  mutate("Sample" = Sample / 1000000) %>%
+  gather(key = "statistic", val = "value", -c(Sample)) %>%
+  ggplot(aes(x = Sample, y = value)) +
+  geom_line() +
+  facet_wrap(~statistic, scales = "free") +
+  xlab("Sampled trees (Millions)")
+```
+
+After removal of 10% burn-in we have:
+
+
+```{r plot after burnin}
+estimates_gtr <- tracerer::remove_burn_ins(beast_result_gtr$estimates, 0.1)
+estimates_gtr %>%
+  mutate("Sample" = Sample / 1000000) %>%
+  gather(key = "statistic", val = "value", -c(Sample)) %>%
+  ggplot(aes(x = Sample, y = value)) +
+  geom_line() +
+  facet_wrap(~statistic, scales = "free") +
+  xlab("Sampled trees (Millions)")
+
+tracerer::calc_esses(estimates_gtr, sample_interval = 5000)
+```
+
+This seems sufficient to continue:
+
+```{r trees_gtr}
+all_trees_gtr <- beast_result_gtr$primates_trees
+start <- floor(0.1 * length(all_trees_gtr))
+end <- length(all_trees_gtr)
+all_trees_gtr <- all_trees_gtr[start:end]
+
+babette::plot_densitree(all_trees_gtr, alpha = 0.1)
+
+cons_tree_gtr <- phytools::consensus.edges(trees = all_trees_gtr)
+par(mfrow = c(1, 2))
+plot(cons_tree, main = "JC69", type = "cladogram")
+add.scale.bar()
+plot(cons_tree_gtr, main = "GTR", type = "cladogram")
+add.scale.bar()
+```
+
+Again, we see that the information contained in the sequences is very
+high, overpowering choices we have made about the substitution model.
+
