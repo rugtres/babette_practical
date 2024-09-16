@@ -175,7 +175,7 @@ every Nth parameter combination. Here, we will use an interval of 1000,
 and generate a chain of 1e6 combinations:
 
 ```{r chain_setup}
-mcmc_settings <- beautier::create_mcmc(chain_length = 1e6, store_every = 1000)
+mcmc_settings <- beautier::create_mcmc(chain_length = 3e6, store_every = 1000)
 ```
 
 ## Running Babette
@@ -266,7 +266,8 @@ tree from our distribution of 900 trees.
 ```{r plotting}
 babette::plot_densitree(all_trees, alpha = 0.1)
 
-cons_tree <- phytools::consensus.edges(trees = all_trees)
+cons_tree <- phytools::consensus.edges(trees = all_trees,
+                                       method = "least.squares")
 plot(cons_tree)
 ```
 
@@ -347,12 +348,21 @@ end <- length(gtr_trees)
 gtr_trees <- gtr_trees[start:end]
 babette::plot_densitree(gtr_trees, alpha = 0.1)
 
-cons_tree_gtr <- phytools::consensus.edges(trees = gtr_trees)
+cons_tree_gtr <- phytools::consensus.edges(trees = gtr_trees,
+                                       method = "least.squares")
+
 par(mfrow = c(1, 2))
 plot(cons_tree, main = "JC69", type = "cladogram")
 add.scale.bar()
 plot(cons_tree_gtr, main = "GTR", type = "cladogram")
-add.scale.bar()d
+add.scale.bar()
+
+ape::ltt.plot(cons_tree,
+              col = "blue", lwd = 3)
+ape::ltt.lines(cons_tree_gtr,
+               col = "red", lwd = 1)
+legend("topleft", legend = c("JC", "GTR"),
+       col = c("blue", "red"), lwd = c(3, 1), lty = c(1, 1))
 ```
 
 It seems the information in the data is very clear, and that choices about the 
